@@ -1,0 +1,193 @@
+#!/bin/sh
+#
+#
+# Note: To perform a dryrun, defines the following environment variable
+#       setenv DRYRUN 1
+#
+fromdir=`pwd`
+mydir=`dirname $0`
+mydir=`(cd $mydir ; pwd)`
+pname=`basename $0`
+
+DATE=`date +%y%m%d-%H%M`
+
+tmpdir=/tmp/rmproject-$$
+rm -rf $tmpdir
+mkdir -p $tmpdir
+cd $tmpdir
+
+SVN_ROOT=https://codex.cro.st.com/svnroot
+module=open64
+
+. $mydir/readargs.sh
+
+
+# here the branch used to build the toolset and compare result with. Must be one of $mydir/config/reference-release-*
+printHelp() {
+  cat <<EOF
+ Usage: $0 option=value...
+
+Remove a SVN branch to the Hudson project.
+Project console available at: http://gnx5796.gnb.st.com:8000/
+
+Mandatory Options:
+  branch=mybranch	Branch to control. Mandatory.
+  			(example: stxp70/main or trunk)
+
+Other Options:
+  module=<module>
+			(supported modules: open64, gcc, stxp70-nightly)
+			Default is open64
+  short_valid={0|1|2} 	
+  			Set to 0 for creating a long valid project.
+            Set to 1 for creating a short valid project.
+            Set to 2 for creating a tiny valid project.
+			Default value is all.
+
+  projectname=<projectname>
+  			Give a project name to CC. By default this option should not be used.
+
+  unique=<unique_suffix>
+  			Add unique_suffix to the projectname. Useful to monitor a branch already monitored by CC.
+
+  debug=[0|1]
+			Set the project in debug mode
+
+Ref to the the documentation at:
+https://codex.cro.st.com/wiki/index.php?pagename=Branch%20Under%20CruiseControl&group_id=440
+
+EOF
+} 
+
+if [ "x$module" != "xopen64" -a  "x$module" != "xgcc" -a  "x$module" != "xstxp70-nightly" ]; then
+    printHelp
+    error "module not recognized"
+fi
+
+if [ "x$branch" = "x" ]; then
+    printHelp
+    error "no branch selected"
+fi
+
+# Remove optional branches/ prefix for branch name
+branch=`echo $branch | sed 's|^branches/||'`
+
+if [ "x$module" = "xgcc" ]; then
+  svn export ${SVN_ROOT}/sh4gcc/branches/${branch}/aci/TARGETS $tmpdir/TARGETS >& /dev/null
+  if [ $? != 0 ]; then
+    target="st40 arm"
+  else
+	target=`cat $tmpdir/TARGETS`
+  fi
+fi
+
+a_short_valid="0 1 2 3"
+[ "x$short_valid" != "x" ] && a_short_valid="$short_valid"
+
+svn co -N ${SVN_ROOT}/aci/hconfig/trunk/projects hconfig_projects >/dev/null 2>&1
+if [ $? != 0 ]; then
+    echo "error: failed command: svn co -N ${SVN_ROOT}/aci/hconfig/trunk/projects hconfig_projects" >&2
+    error "error: failed command: svn co -N ${SVN_ROOT}/aci/hconfig/trunk/projects hconfig_projects"
+fi
+
+br_name=`echo $branch | sed 's/[^_a-zA-Z0-9]/-/g'`
+[ "$debug" = "0" ] && debug=
+
+
+###############################################
+#         Remove validation project           #
+###############################################
+
+if [ "x$module" = "xopen64" ]; then
+  for my_short_valid in $a_short_valid ; do
+    if [ "x$my_short_valid" = "x0" ]; then
+      postfix="long"
+    elif [ "x$my_short_valid" = "x1" ]; then
+      postfix="short"
+    elif [ "x$my_short_valid" = "x2" ]; then
+      postfix="tiny"
+    elif [ "x$my_short_valid" = "x3" ]; then
+      postfix="test"
+    else
+      printHelp
+      error "cannot determine validation type (short/long/tiny)"
+    fi
+    all_proj=`list_aci_project -module=$module -branch=${br_name} -pattern=${postfix}`
+    for projectname in $all_proj ; do
+      [ "$debug" != "" ] && [ `echo $projectname | grep debug | wc -l` -eq 0 ] && continue
+      [ "$unique" != "" ] && [ `echo $projectname | grep $unique | wc -l` -eq 0 ] && continue
+      svn rm hconfig_projects/${projectname} >/dev/null 2>/dev/null
+    done
+  done
+elif [ "x$module" = "xstxp70-nightly" ]; then
+    projectname=${module}-${branch}-build
+    if [ -f hconfig_projects/${projectname} ]; then
+        # remove build project
+        svn rm hconfig_projects/${projectname} >/dev/null 2>/dev/null
+        #remove validation projects
+        svn rm hconfig_projects/${module}-${branch}-valid-* >/dev/null 2>/dev/null
+    else
+        echo ""
+        echo "WARNING: Project '${projectname}' not found."
+        echo ""
+        echo "Existing ${module} projects are:"
+        PROJECT_LIST=`ls hconfig_projects/${module}-*-build | sed "s#hconfig_projects/${module}-##g;s#-build##g"`
+        for prj in $PROJECT_LIST; do
+            echo "o "$prj
+        done
+        echo ""
+    fi
+elif [ "x$module" = "xgcc" ]; then
+  for my_target in $target ; do
+    for my_short_valid in $a_short_valid ; do
+      if [ "x$my_short_valid" = "x0" ]; then
+        postfix="long"
+      elif [ "x$my_short_valid" = "x1" ]; then
+        postfix="short"
+      elif [ "x$my_short_valid" = "x2" ]; then
+        postfix="tiny"
+      elif [ "x$my_short_valid" = "x3" ]; then
+        postfix="test"
+      else
+        printHelp
+        error "cannot determine validation type (short/long/tiny)"
+      fi
+
+      [ "x$projectname" = "x" -a "$debug" != "" ] && projectname="debug-${my_target}-${module}-${br_name}-${postfix}"
+      [ "x$projectname" = "x" ] && projectname="${my_target}-${module}-${br_name}-${postfix}"
+      [ "x$unique" != "x" ] && projectname=$projectname-$unique
+
+      svn rm hconfig_projects/${projectname} >/dev/null 2>/dev/null
+      projectname=""
+    done
+  done
+fi
+
+########################################
+#        Finalize the removal          #
+########################################
+
+if [ "$DRYRUN" = "" ]; then
+  svn ci -m "remove projects: automatically removed projects for branch $branch." hconfig_projects >/dev/null
+  if [ $? != 0 ]; then
+    echo "error: ${SVN_ROOT}/aci/hconfig/trunk/projects cannot be written"
+    error "SVN write error. Project not removed"
+  fi
+
+  rm -rf $tmpdir
+  echo ""
+  echo "Project entry for branch $branch succesfully removed."
+  echo ""
+else
+  echo ""
+  echo "Dryrun mode. No change done to central repository."
+  echo "Project ready to be commited in $tmpdir."
+  echo "Please remove $tmpdir afterward."
+  echo ""
+  echo "$ svn status"
+  cd $tmpdir/hconfig_projects
+  svn status
+  echo ""
+fi
+
+cd $mydir

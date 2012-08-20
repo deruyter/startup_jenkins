@@ -1,0 +1,151 @@
+#!/usr/bin/env bash
+#
+#
+fromdir=`pwd`
+mydir=`dirname $0`
+mydir=`(cd $mydir ; pwd)`
+pname=`basename $0`
+
+# get this file revision
+TOP_DIR=${TOP_DIR:-/home/compwork/cruisecontrol/CC/persistent_outputs/aci-results/open64-nightly-res}
+WORK_DIR=${WORK_DIR:-/work/aci-cec/CC/temporaries/aci-work}
+
+build_host=linux
+default_targets="stxp70 st200 arm stxpe stxp70v4"
+
+DATE=`date +%y%m%d-%H%M`
+
+. $mydir/readargs.sh
+
+set -x
+
+# here the branch used to build the toolset and compare result with. Must be one of $mydir/config/reference-release-*
+printHelp() {
+  cat <<EOF
+ Usage: $0 option=value...
+
+Force all CruiseControl projects attached to a SVN branch of the Open64 Compilers.
+Use this to force a new SVN extraction and a new toolset build.
+
+Mandatory Options:
+  branch=mybranch	Branch to force. Mandatory.
+  			(example: stxp70/main or trunk)
+  dry=1			Dry run
+  onlyvalid=1		Reforce only the validation. Compilation is kept.
+  cleanall=1		Deep clean of directories
+  target="..."         List of targets to clean. Default: ${default_targets}
+  suite="..."           Reforce only the validation of suite
+  unique=<unique_suffix >
+  			Add unique_suffix to the projectname.
+
+EOF
+}  
+
+if [ "x$branch" = "x" ]; then
+    printHelp
+    error "no branch selected"
+fi
+
+if [ "$target" = "" ]; then
+    target="${default_targets}"
+fi
+
+if [ "$target" = "" ]; then
+    printHelp
+    error "no target selected"
+fi
+
+if [ "x$cleanall" != "x" ]; then
+    echo Clean all ${target}.......
+else 
+    echo Clean ${target}.......
+fi
+
+if [ "x$dry" != "x" ]; then
+    echo Dry Run.......
+fi
+
+
+d_branch=`echo $branch | sed 's![^_a-zA-Z0-9]!-!g'`
+# Get the last revision of the project sources
+case $branch in
+    trunk) \
+	branch_path=trunk
+	;;
+    branches/*) \
+	branch_path=$branch
+	;;
+    tags/*) \
+	branch_path=$branch
+	;;
+    *) \
+	branch_path=branches/$branch
+	;;
+esac
+svn_url=https://codex.cro.st.com/svnroot/open64/$branch_path
+if [ "$revision" = "" ]; then
+    echo get revision at $svn_url
+    svn_revision=`svn info $svn_url | grep "Last Changed Rev" | cut -d' ' -f4`
+    if [ "x$svn_revision" = "x" ]; then
+	error "Force failed: cannot get revision at $svn_url"
+        # no return
+    fi
+else
+    svn_revision=$revision
+fi
+d_unique=open64-${build_host}-${d_branch}-${svn_revision}
+#Add unique when requested. Case of a project working on the same
+#branch of an already existing project"
+[ "x$unique" != "x" ] && d_unique=$d_unique-$unique
+
+if [ "x$cleanall" != "x" ]; then
+    for target in ${target}; do
+	d_unique_target=open64-${build_host}-${target}-${d_branch}-${svn_revision}
+	[ "x$unique" != "x" ] && d_unique_target=$d_unique_target-$unique
+
+	echo removing dir $TOP_DIR/results/${d_unique}/${target}
+	[ "$dry" = "" ] && rm -rf $TOP_DIR/results/${d_unique}/${target}
+	
+	echo removing dir $TOP_DIR/performance/${d_unique_target}
+	[ "$dry" = "" ] && rm -rf $TOP_DIR/performance/${d_unique_target}
+	
+	echo removing dir $WORK_DIR/valid/${d_unique}/${target}
+	[ "$dry" = "" ] && rm -rf $WORK_DIR/valid/${d_unique}/${target}
+    done
+  
+    if [ "$onlyvalid" != "1" ]; then
+	echo removing dir $TOP_DIR/compilers/${d_unique}/${target}
+#	[ "$dry" = "" ] && rm -rf $TOP_DIR/compilers/${d_unique}
+ 	[ "$dry" = "" ] && rm -rf $TOP_DIR/compilers/${d_unique}/${target}
+ 	[ "$dry" = "" ] && rm -rf $TOP_DIR/compilers/${d_unique}/build-${target}.end
+ 	[ "$dry" = "" ] && rm -rf $TOP_DIR/compilers/${d_unique}/extract.*
+ 	[ "$dry" = "" ] && rm -rf $TOP_DIR/compilers/${d_unique}/machine.*
+	
+	echo removing dir $WORK_DIR/build/${d_unique}
+	[ "$dry" = "" ] && rm -rf $WORK_DIR/build/${d_unique}
+    fi
+    exit 0
+fi
+
+if [ "x$suite" != "x" ]; then
+    file_to_remove_valid=`find $TOP_DIR/results/${d_unique} -name "*.end" -o -name "*.xml" -o -name "*.log" | grep $suite 2>/dev/null`
+else
+    file_to_remove_valid=`find $TOP_DIR/results/${d_unique} -name "*.end" -o -name "*.xml" -o -name "*.log" 2>/dev/null`
+fi
+if [ "x$onlyvalid" = "x1" ]; then
+    file_to_remove=$file_to_remove_valid
+else
+    file_to_remove_compile=`find $TOP_DIR/compilers/${d_unique} -name "*.end" -o -name "*.xml" -o -name "*.log" 2>/dev/null`
+    file_to_remove="$file_to_remove_compile $file_to_remove_valid"
+fi
+
+for file in $file_to_remove; do
+    echo Removing $file
+    if [ "x$dry" = "x" ]; then
+	rm -f $file || error "Cannot remove files"
+    fi
+done
+
+echo ""
+echo "All project entries associated to  $branch branch have been succesfully forced."
+echo ""

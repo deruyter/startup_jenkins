@@ -1,0 +1,79 @@
+#!/bin/sh
+#
+# clean-dir <dir> <pattern> <days>
+#
+# cleans all entries matching pattern found in the directory that have modification time > <days>
+#
+this_dir=`dirname $0`
+pname=`basename $0`
+this_dir=`cd $this_dir; pwd`
+dir=$1
+pattern=$2
+days=$3
+quiet=0
+
+usage() {
+  cat <<EOF
+usage: $0 <dir> <pattern> <days>
+
+ cleans all entries matching <pattern> found in the directory <dir>
+ that have modification time that last more than <days> days.
+EOF
+}
+
+error() {
+  usage >&2
+  echo >&2
+  echo "error: $1" >&2
+  exit 1
+}
+
+
+##TB: Inline daysof otherwise it's too long
+daysof()  {
+    file=$1
+ 
+    option=
+    [ -d $file ] && option=-d
+
+    lsout=`ls -l $option --time-style="+%Y %m %d" $file 2>/dev/null` || return 0
+    
+    fy=`echo $lsout | cut -d' ' -f6`
+    fm=`echo $lsout | cut -d' ' -f7`
+    fd=`echo $lsout | cut -d' ' -f8`
+    
+    date=`date '+%Y %m %d'`
+    ty=`echo $date | cut -d' ' -f1`
+    tm=`echo $date | cut -d' ' -f2`
+    td=`echo $date | cut -d' ' -f3`
+    
+# estimate days since 0/0/0
+    t_days=`expr 365 '*' $ty '+' 30 '*' $tm '+' $td`
+    f_days=`expr 365 '*' $fy '+' 30 '*' $fm '+' $fd`
+    expr $t_days '-' $f_days
+}
+
+[ "x$dir" != "x" ] || error "missing argument: <dir>"
+[ "x$pattern" != "x" ] || error "missing argument: <pattern>"
+[ "x$days" != "x" ] || error "missing argument: <days>"
+
+[ -f $this_dir/$pname ] || error "cannot determine directory of $0,  found $this_dir/$pname"
+
+[ -d $dir ] || error "directory does not exist: $dir"
+
+# cd to dest directory
+cd $dir >/dev/null 2>&1 || error "cannot change to directory: $dir"
+
+list=`echo $pattern`
+[ "x$list" = "x" ] && exit 0
+
+for i in $list; do
+  mydaysof=`daysof $i`
+  if [ "x$mydaysof" != "x" ]; then
+    if [ "$mydaysof" -gt "$days" ]; then
+      [ "x$quiet" != "x1" ] && echo Removing file/dir $mydaysof days old: $dir/$i 
+      chmod -R u+w $i
+      rm -rf $i
+    fi
+  fi
+done

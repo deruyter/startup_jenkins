@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+#
+# SYNOPSYS
+#  ./extract_deptools
+#
+# DESCRIPTION
+#
+#  Extracts the deptools tools into deptools directory.
+#  This cript always extract the last version.
+#
+
+[ "$DEBUG" = 1 ] && set -x
+
+error() {
+    echo "$1" >&2
+    exit 1
+}
+
+deptools_url=http://codex.cro.st.com/svnroot/aci/projects/trunk/deptools
+deptools_revision=HEAD
+actual_revision=`svn info -r $deptools_revision $deptools_url | grep "Last Changed Rev:" | awk '{print $4;}'`
+[ "$actual_revision" != "" ] || error "Cannot access url $deptools_url revision $deptools_revision"
+
+rm -rf deptools
+svn co --quiet --non-interactive -r $actual_revision $deptools_url deptools || error "Cannot extract url $deptools_url revision $actual_revision"
+

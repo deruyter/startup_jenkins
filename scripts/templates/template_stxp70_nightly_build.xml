@@ -1,0 +1,271 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <logRotator>
+    <daysToKeep>-1</daysToKeep>
+    <numToKeep>-1</numToKeep>
+    <artifactDaysToKeep>-1</artifactDaysToKeep>
+    <artifactNumToKeep>7</artifactNumToKeep>
+  </logRotator>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.BooleanParameterDefinition>
+          <name>NIGHTLY_MODE</name>
+          <description>When enabled, some implicit modifications are applied at build time:
+- The compiler is build in debug mode from Monday to Thursday (add -debug-mode to RELEASE_OPTIONS)
+</description>
+          <defaultValue>__NIGHTLY_MODE__</defaultValue>
+        </hudson.model.BooleanParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>PREPARE_RELEASE_OPTIONS</name>
+          <description>IMPORTANT: If '-dep' is defined, the RTK branch is retrieved from the open64 DEPENDENCIES file instead of from the env.sh file of the release-script branch. When validating a release with specific release scripts, it is probably required to remove the -dep option.</description>
+          <defaultValue>__PREPARE_RELEASE_OPTIONS__</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>VERSION_MAJOR</name>
+          <description></description>
+          <defaultValue>__VERSION_MAJOR__</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>VERSION_MINOR</name>
+          <description></description>
+          <defaultValue>__VERSION_MINOR__</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>VERSION_MICRO</name>
+          <description></description>
+          <defaultValue>__VERSION_MICRO__</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>VERSION_MATUR</name>
+          <description>Keep this field empty to have a compiler tagged with branch/rev information (only working when -debug-mode is on)</description>
+          <defaultValue></defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>RELEASE_SCRIPT_BRANCH</name>
+          <description></description>
+          <defaultValue>__RELEASE_SCRIPT_BRANCH__</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>RELEASE_OPTIONS</name>
+          <description></description>
+          <defaultValue>__RELEASE_OPTIONS__ -o release.tar.gz</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>REFERENCE_DIR_DEST_TOOLSET</name>
+          <description></description>
+          <defaultValue>__REFERENCE_TOOLSET__</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>OPEN64_SOURCE_BRANCH</name>
+          <description></description>
+          <defaultValue>__OPEN64_SOURCE_BRANCH__</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>GBU_SOURCE_BRANCH</name>
+          <description></description>
+          <defaultValue>__GBU_SOURCE_BRANCH__</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>NEWLIB_SOURCE_BRANCH</name>
+          <description></description>
+          <defaultValue>__NEWLIB_SOURCE_BRANCH__</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>MONDAY_VALID</name>
+          <description>Supported validations are: V3, V4_DUAL, V4_SINGLE, V4_NOVLIW, V3_MPX, V4_DUAL_MPX, V4_SINGLE_MPX, V4_NOVLIW_MPX, V3_MPX_FRACT, V4_MPX_FRACT, V3_MPX_ETSI, V4_DUAL_MPX_ETSI</description>
+          <defaultValue>__MONDAY_VALID__</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>TUESDAY_VALID</name>
+          <description>(See MONDAY_VALID for available flags)</description>
+          <defaultValue>__TUESDAY_VALID__</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>WEDNESDAY_VALID</name>
+          <description>(See MONDAY_VALID for available flags)</description>
+          <defaultValue>__WEDNESDAY_VALID__</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>THURSDAY_VALID</name>
+          <description>(See MONDAY_VALID for available flags)</description>
+          <defaultValue>__THURSDAY_VALID__</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>FRIDAY_VALID</name>
+          <description>(See MONDAY_VALID for available flags)</description>
+          <defaultValue>__FRIDAY_VALID__</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>SATURDAY_VALID</name>
+          <description>(See MONDAY_VALID for available flags)</description>
+          <defaultValue>__SATURDAY_VALID__</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>SUNDAY_VALID</name>
+          <description>(See MONDAY_VALID for available flags)</description>
+          <defaultValue>__SUNDAY_VALID__</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>EXTRA_TOOLSET_PACKAGES</name>
+          <description>List of archive packages to be uncompressed in the root directory of the destination toolset (the list item must be comma-separated). New packages can be registered into the ACI with the xtra-install-package project.</description>
+          <defaultValue></defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>XIE_TO_INSTALL</name>
+          <description>List of pre-build XIE packages to install in the destination toolset (the list items must be comma-separated). New packages can be registered into the ACI with the xtra-install-package project.</description>
+          <defaultValue></defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>EXT_BUILD_AND_INSTALL</name>
+          <description>List of standard extensions to build and install in the destination toolset (the list items must be comma-separated). If set to ALL, then all standard extensions will be considered. Available extensions are listed in xie-package-list.sh of the release-scripts (As of 2012/05/14: MP1x_v3 MP1x_cfg3single_v4 MP1x_expert_cfg25_v4 MP2x_v3 DIVx_v4 VECx_v4 CRCx_v4)</description>
+          <defaultValue>MP1x_v3,MP1x_expert_cfg25_v4</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>PERF_REF_LIST</name>
+          <description>Name of the references to be used for performance comparison</description>
+          <defaultValue>STxP70_Toolset_2012.1_With_Updates</defaultValue>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  __ASSIGNED_NODE__
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <triggers class="vector">
+    <hudson.triggers.TimerTrigger>
+      <spec>0 19 * * 1-7</spec>
+    </hudson.triggers.TimerTrigger>
+  </triggers>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>
+PREPARE_RELEASE_OPTIONS="$PREPARE_RELEASE_OPTIONS -release-source-branch stxp70-release/$RELEASE_SCRIPT_BRANCH"
+
+# Validations to be launched depend on the day of the week.
+# If current job has been enqueued on day D but effectively
+# starts on day D+1, we still want to launch the validation
+# corresponding to D. Noon is used as the separator between
+# days.
+hour=`date +"%k"`
+day_of_week=`date +"%w"`
+if [ $hour -lt 12 ]; then
+    ((day_of_week--))
+    [ $day_of_week -eq -1 ] &amp;&amp; day_of_week=6
+fi
+
+normalize_list() {
+    echo $* | sed 's/^[ ]*//;s/[ ]*$//;s/ /,/g'
+}
+
+case $day_of_week in
+    0) VALID_LIST=`normalize_list ${SUNDAY_VALID}`;;
+    1) VALID_LIST=`normalize_list ${MONDAY_VALID}`;;
+    2) VALID_LIST=`normalize_list ${TUESDAY_VALID}`;;
+    3) VALID_LIST=`normalize_list ${WEDNESDAY_VALID}`;;
+    4) VALID_LIST=`normalize_list ${THURSDAY_VALID}`;;
+    5) VALID_LIST=`normalize_list ${FRIDAY_VALID}`;;
+    6) VALID_LIST=`normalize_list ${SATURDAY_VALID}`;;
+esac
+export VALID_LIST
+
+PERF_REF_LIST=`normalize_list ${PERF_REF_LIST}`
+EXTRA_TOOLSET_PACKAGES=`normalize_list ${EXTRA_TOOLSET_PACKAGES}`
+EXT_BUILD_AND_INSTALL=`normalize_list ${EXT_BUILD_AND_INSTALL}`
+XIE_TO_INSTALL=`normalize_list ${XIE_TO_INSTALL}`
+
+if [ "${EXT_BUILD_AND_INSTALL}" != "" ]; then
+    if [ "${EXT_BUILD_AND_INSTALL}" = "ALL" ]; then
+        RELEASE_OPTIONS=${RELEASE_OPTIONS}" -xie"
+    else
+        RELEASE_OPTIONS=${RELEASE_OPTIONS}" -xie -xie-pack ${EXT_BUILD_AND_INSTALL}"
+    fi
+fi
+
+if [ "$NIGHTLY_MODE" = "true" ]; then
+    # From Monday to Thursday, the compiler build is in debug mode
+    if [ $day_of_week -ge 1 -a $day_of_week -le 4 ]; then
+        RELEASE_OPTIONS=${RELEASE_OPTIONS}" -debug-mode"
+    fi
+
+    # Build XIE on Friday night
+#    if [ $day_of_week -eq 5 ]; then
+#        RELEASE_OPTIONS=${RELEASE_OPTIONS}" -xie"
+#    fi
+fi
+
+env PREPARE_RELEASE_OPTIONS="${PREPARE_RELEASE_OPTIONS}" \
+    VERSION_MAJOR="${VERSION_MAJOR}" \
+    VERSION_MINOR="${VERSION_MINOR}" \
+    VERSION_MICRO="${VERSION_MICRO}" \
+    VERSION_MATUR="${VERSION_MATUR}" \
+    RELEASE_SCRIPT_BRANCH="${RELEASE_SCRIPT_BRANCH}" \
+    RELEASE_OPTIONS="${RELEASE_OPTIONS}" \
+    REFERENCE_DIR_DEST_TOOLSET="${REFERENCE_DIR_DEST_TOOLSET}" \
+    OPEN64_SOURCE_BRANCH="${OPEN64_SOURCE_BRANCH}" \
+    GBU_SOURCE_BRANCH="${GBU_SOURCE_BRANCH}" \
+    NEWLIB_SOURCE_BRANCH="${NEWLIB_SOURCE_BRANCH}" \
+    VALID_LIST="${VALID_LIST}" \
+    XIE_TO_INSTALL="${XIE_TO_INSTALL}" \
+    EXT_BUILD_AND_INSTALL="${EXT_BUILD_AND_INSTALL}" \
+    EXTRA_TOOLSET_PACKAGES="${EXTRA_TOOLSET_PACKAGES}" \
+    PERF_REF_LIST="${PERF_REF_LIST}" \
+  ${ACI_ROOT_DIR}/scripts/run_aci_project stxp70-release
+</command>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers>
+    <hudson.tasks.BuildTrigger>
+      <childProjects>__CHILD_PROJECTS__</childProjects>
+      <threshold>
+        <name>SUCCESS</name>
+        <ordinal>0</ordinal>
+        <color>BLUE</color>
+      </threshold>
+    </hudson.tasks.BuildTrigger>
+    <hudson.tasks.ArtifactArchiver>
+      <artifacts>stxp70-release/release-scripts/artifacts/*</artifacts>
+      <latestOnly>false</latestOnly>
+    </hudson.tasks.ArtifactArchiver>
+    <hudson.plugins.summary__report.ACIPluginPublisher>
+      <name>stxp70-release/release-scripts/artifacts/*.xml</name>
+    </hudson.plugins.summary__report.ACIPluginPublisher>
+    <hudson.plugins.emailext.ExtendedEmailPublisher>
+      <recipientList>__USER_MAIL__</recipientList>
+      <configuredTriggers>
+        <hudson.plugins.emailext.plugins.trigger.FailureTrigger>
+          <email>
+            <recipientList></recipientList>
+            <subject>$PROJECT_DEFAULT_SUBJECT</subject>
+            <body>$PROJECT_DEFAULT_CONTENT</body>
+            <sendToDevelopers>true</sendToDevelopers>
+            <sendToRequester>false</sendToRequester>
+            <includeCulprits>false</includeCulprits>
+            <sendToRecipientList>true</sendToRecipientList>
+          </email>
+        </hudson.plugins.emailext.plugins.trigger.FailureTrigger>
+        <hudson.plugins.emailext.plugins.trigger.SuccessTrigger>
+          <email>
+            <recipientList></recipientList>
+            <subject>$PROJECT_DEFAULT_SUBJECT</subject>
+            <body>$PROJECT_DEFAULT_CONTENT</body>
+            <sendToDevelopers>true</sendToDevelopers>
+            <sendToRequester>false</sendToRequester>
+            <includeCulprits>false</includeCulprits>
+            <sendToRecipientList>true</sendToRecipientList>
+          </email>
+        </hudson.plugins.emailext.plugins.trigger.SuccessTrigger>
+      </configuredTriggers>
+      <contentType>default</contentType>
+      <defaultSubject>$DEFAULT_SUBJECT</defaultSubject>
+      <defaultContent>$DEFAULT_CONTENT</defaultContent>
+    </hudson.plugins.emailext.ExtendedEmailPublisher>
+  </publishers>
+  <buildWrappers/>
+</project>

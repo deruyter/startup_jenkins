@@ -1,0 +1,163 @@
+<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:u="jelly:util" >
+
+
+    <!-- *************** -->
+    <!--     Main        -->
+    <!-- *************** -->
+<html>
+  <head>
+      <title>${project.name}</title>
+   </head>
+   <style type="text/css" > 
+#reports 
+{
+font-family:Verdana, Helvetica, Arial, Helvetica, sans-serif;
+font-size: 12px;
+width:75%;
+text-align:center;
+padding-top:3px;
+padding-bottom:3px;
+}
+#reports td,#reports th, #reports sc 
+{
+font-size:1em;
+border:2px ridge #BDBDBD;
+text-align:center;
+}
+.fl
+{
+background-color:#CC6666;
+color:#FFFFFF;
+} 
+.sc 
+{
+background-color:#99CC66;
+color:#000000;
+} 
+.sk 
+{
+background-color:#99CCFF;
+} 
+.thick
+{
+text-align:left;
+font-weight:bold;
+} 
+#reports th 
+{
+font-size:1em;
+text-align:center;
+padding-top:3px;
+padding-bottom:3px;
+background-color:#BDBDBD;
+color:#0000ff;
+width:17%
+}
+</style>
+
+   <body style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
+  <!-- GENERAL INFO -->
+  <table style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
+   <tr>
+    <td align="right" style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
+     <j:choose>
+      <j:when test="${build.result=='SUCCESS'}">
+       <img src="${rooturl}static/e59dfe28/images/32x32/blue.gif">
+       </img>
+      </j:when>
+      <j:when test="${build.result=='FAILURE'}">
+       <img src="${rooturl}static/e59dfe28/images/32x32/red.gif">
+       </img>
+      </j:when>
+      <j:otherwise>
+       <img src="${rooturl}static/e59dfe28/images/32x32/yellow.gif">
+       </img>
+      </j:otherwise>
+     </j:choose>
+    </td>
+    <td valign="center" style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
+     <b style="font-size: 200%;">BUILD ${build.result}</b></td>
+   </tr>
+   <tr>
+    <td style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">Build URL</td>
+    <td style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black"><a href="${rooturl}${build.url}">${rooturl}${build.url}</a></td>
+   </tr>
+   <tr>
+    <td style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
+     Project:
+    </td>
+    <td style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
+     ${project.name}
+    </td>
+   </tr>
+   <tr>
+    <td style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
+     Date of build:
+    </td>
+    <td style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
+     ${it.timestampString}
+    </td>
+   </tr>
+   <tr>
+    <td style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">Build duration:</td>
+    <td style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">${build.durationString}</td>
+   </tr>
+  </table>
+  <br />
+  <!-- CHANGE SET -->
+  <j:set var="changeSet" value="${build.changeSet}" />
+  <j:if test="${changeSet!=null}">
+   <j:set var="hadChanges" value="false" />
+   <table width="100%" style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
+    <tr>
+     <td class="bg1" colspan="2" style="font-family: Verdana, Helvetica, sans serif; font-size: 120%; color: white; background-color: #0000C0"><b>CHANGES</b></td>
+    </tr>
+    <j:forEach var="cs" items="${changeSet}" varStatus="loop">
+     <j:set var="hadChanges" value="true" />
+     <j:set var="aUser" value="${cs.hudsonUser}" />
+     <tr>
+      <td colspan="2" class="bg2" style="font-family: Verdana, Helvetica, sans serif; font-size: 110%; color: white; background-color: #4040FF">${spc}Revision
+       <b>${cs.commitId?:cs.revision?:cs.changeNumber}</b>
+       by 
+       <b>${aUser!=null?aUser.displayName:cs.author.displayName}:</b>
+       <b>(${cs.msgAnnotated})</b>
+      </td>
+     </tr>
+     <j:forEach var="p" items="${cs.affectedFiles}">
+      <tr>
+       <td width="10%" style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">${spc}${p.editType.name}</td>
+       <td style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">${p.path}</td>
+      </tr>
+     </j:forEach>
+    </j:forEach>
+    <j:if test="${!hadChanges}">
+     <tr>
+      <td colspan="2" style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">No Changes</td>
+     </tr>
+    </j:if>
+   </table>
+   <br />
+  </j:if>
+  <!-- SUMMARY -->
+
+   <table width="100%" cellpadding="0" cellspacing="0" style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
+    <tr>
+     <td class="bg1" style="font-family: Verdana, Helvetica, sans serif; font-size: 120%; color: white; background-color: #0000C0"><b>BUILD RESULT SUMMARY</b></td>
+    </tr>
+   </table>
+    <!-- get 00_mail.txt -->
+    <j:set var="artifacts" value="${build.artifacts}" />
+    <j:if test="${artifacts!=null and artifacts.size()&gt;0}">
+      <j:forEach var="f" items="${artifacts}">
+        <j:if test="${f=='artifacts/00_mail.txt'}">
+            <!--<p><a href="${rooturl}${build.url}artifact/${f}">${f}</a></p>-->
+	    <j:include file="${build.artifactsDir}/${f}"/>
+        </j:if>
+      </j:forEach>
+    </j:if>
+   <br />
+   
+  
+  </body>
+</html>
+</j:jelly>

@@ -1,0 +1,45 @@
+#!/bin/sh
+#
+# daysof <file>
+# get days of fail
+#
+file=$1
+
+usage() {
+  cat <<EOF
+usage: $0 <file>
+
+  outputs the number of days the file is.
+EOF
+}
+
+error() {
+  usage >&2
+  echo >&2
+  echo "error: $1" >&2
+  exit 1
+}
+
+[ "x$file" != "x" ] || error "missing argument: <file>"
+
+option=
+[ -d $file ] && option=-d
+
+lsout=`ls -l $option --time-style="+%Y %m %d" $file 2>/dev/null || error "cannot access file: $file"`
+
+fy=`echo $lsout | cut -d' ' -f6`
+fm=`echo $lsout | cut -d' ' -f7`
+fd=`echo $lsout | cut -d' ' -f8`
+
+date=`date '+%Y %m %d'`
+ty=`echo $date | cut -d' ' -f1`
+tm=`echo $date | cut -d' ' -f2`
+td=`echo $date | cut -d' ' -f3`
+
+# estimate days since 0/0/0
+t_days=`expr 365 '*' $ty '+' 30 '*' $tm '+' $td`
+f_days=`expr 365 '*' $fy '+' 30 '*' $fm '+' $fd`
+expr $t_days '-' $f_days
+
+
+

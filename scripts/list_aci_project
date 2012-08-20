@@ -1,0 +1,103 @@
+#!/bin/env perl 
+
+use strict;
+use File::Temp qw( tempfile tempdir );
+use Getopt::Long;
+use Pod::Usage;
+
+my $svnroot="http://codex.cro.st.com/svnroot/aci/hconfig";
+
+sub error {
+  my ($msg) = @_;
+  print STDERR "$0: error: $msg\n";
+  exit 1;
+}
+
+sub read_fh {
+  my ($fh) = @_;
+  local $/;
+  return <$fh>;
+}
+
+sub cmd_run {
+  my ($cmd) = @_;
+  system("$cmd >/dev/null 2>&1");
+  return $? == 0;
+}
+
+my $tmpdir;
+my $help;
+my $man;
+my $pname;
+my $module;
+my $pattern;
+my $branch;
+
+GetOptions ("help|?"  => \$help, 'man' => \$man, 'module=s' => \$module, 'pattern=s' => \$module, 'branch=s' => \$branch) or pod2usage(2);
+pod2usage(0) if $help;
+pod2usage(-exitstatus => 0, -verbose => 2) if $man;
+$pname = $ARGV[0];
+
+cmd_run("svn ls $svnroot/trunk/projects") 
+    or error "cannot access $svnroot/trunk/projects";
+
+if (!defined($pname)) {
+  # List all project names
+  my @list;
+  @list = `svn ls $svnroot/trunk/projects`;
+  if ("$module" ne "") {
+    @list = grep(/$module/,@list);
+  }
+  if ("$branch" ne "") {
+    @list = grep(/$branch/,@list);
+  }
+  if ("$pattern" ne "") {
+    @list = grep(/$pattern/,@list);
+  }
+  print "@list";
+} else {
+  cmd_run("svn ls $svnroot/trunk/projects/$pname") 
+    or error "project $pname does not exist";;
+    system("svn cat $svnroot/trunk/projects/$pname");
+}
+
+
+__END__
+
+=head1 NAME
+
+  list_project - List currently defined Cruise Control projects
+
+=head1 SYNOPSIS
+
+  list_project [options] [project_name]
+
+  Where:
+  project_name	: if given list the definition of the project
+
+=head1 OPTIONS
+
+=over 8
+
+=item B<--help>
+
+    Print short help message.
+
+=item B<--man>
+
+    Print more detailled help.
+
+=back
+
+=head1 DESCRIPTION
+
+  This program will list the existing project entries 
+  from the cruise control configuration file.
+
+  If project_name is specified, the project definition 
+  will be output.
+
+  The Cruise Control configuration file modified is:
+http://codex.cro.st.com/svnroot/aci/ccconfig/trunk/config.xml
+
+=cut

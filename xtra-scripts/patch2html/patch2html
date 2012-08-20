@@ -1,0 +1,78 @@
+#!/usr/bin/env perl
+use strict;
+
+BEGIN
+{
+  use File::Basename;
+  unshift(@INC, dirname($0) . "/lib");
+}
+
+use File::Basename;
+use Cwd qw(abs_path);
+use Getopt::Long;
+use Template;
+use PatchReader::Raw;
+use PatchReader::DiffPrinter::template;
+
+
+
+#
+# Preparation
+#
+my $me;
+my $mydir;
+$me = basename($0);
+$mydir = abs_path(dirname($0));
+
+
+#
+# Support functions
+#
+sub ThrowTemplateError {
+  my ($msg) = @_;
+  print STDERR "$msg";
+  die;
+}
+
+sub usage {
+  my $code = shift;
+  print STDERR <<EOM;
+ Usage: $me [options...] <patch.txt >patch.html
+
+     Transforms any source patch into a single html patch file.
+
+     Options are:
+
+     -e|--expanded: gennerated the patch file expanded at start (not collapsed)
+
+EOM
+}
+
+#
+# Initialization
+#
+my $opt_expanded = 0;
+
+Getopt::Long::config(qw(no_ignore_case));
+usage(1) unless GetOptions('e|expanded' => \$opt_expanded,
+			   'h|help' => sub { usage(0); });
+
+#
+# main processing
+#	
+my $reader = new PatchReader::Raw();
+my $template = new Template({OUTPUT => \*STDOUT, 
+			     INCLUDE_PATH => "$mydir/templates", 
+			     ABSOLUTE => 1 });
+my $tpl_printer = 
+    new PatchReader::DiffPrinter::template($template,
+					   "diff-header.html.tmpl",
+					   "diff-file.html.tmpl",
+					   "diff-footer.html.tmpl",
+					   { collapsed => !$opt_expanded });
+$reader->sends_data_to($tpl_printer);
+
+# Iterate over the file
+$reader->iterate_fh(\*STDIN, "stdin");
+
+

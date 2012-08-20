@@ -1,0 +1,155 @@
+#!/bin/sh -x
+#
+# SYNOPSYS
+# ./run_aci_project <component_name>
+#
+# DESCRIPTION
+#  Runs the aci project validation for the component given.
+#  The steps are roughtly:
+#  - extract the aci ccconfig component to find which version of the 
+#    validation component (<component_name>_valid component) for the given
+#    component to use,
+#  - extract the validation component (<component_name>_valid component) at 
+#  the version detected above,
+#  - runs the build_and_valid script of the validation component which should
+#    itself extract build and valid the given component.
+#
+
+pdir=`dirname $0`
+pdir=`cd $pdir;pwd`
+
+aci_workdir=`cd ${ACI_ROOT_DIR}; pwd`
+
+pname=${JOB_NAME}_${BUILD_NUMBER}
+SID=hudson-${pname}
+grpname=hudson-run_aci_project-${pname}
+
+error() {
+    echo "$1" >&2
+    exit 1
+}
+
+
+cmd() {
+    failed=0
+    echo Executing at `date +%y%m%d-%H%M%S`'>' $*
+    $HUDSON_DRY ${1+"$@"} || failed=1
+    [ "$failed" = "1" ] && echo Failed at `date +%y%m%d-%H%M%S`'>' $*
+    [ "$failed" = "1" ] && exit 1
+    echo Completed at `date +%y%m%d-%H%M%S`'>' $*
+
+}
+
+# Setup default paths (for svn in particular)
+export PATH=`/sw/st/gnu_compil/gnu/scripts/guess-path`:${PATH}
+export LD_LIBRARY_PATH=`/sw/st/gnu_compil/gnu/scripts/guess-lib-path`:${LD_LIBRARY_PATH}
+
+# Arguments processing
+while [ $# != 0 ]; do
+    opt=$1
+    case $opt in
+    -use_lsf) use_lsf=yes 
+            ;;
+	--) shift
+	    break
+	    ;;
+	-*) error "unknown option $opt"
+	    ;;
+	*) break
+	    ;;
+    esac
+    shift
+done
+component=$1
+[ "$component" != "" ] || error "missing component argument"
+shift
+comp_valid=${component}_valid
+
+# Arguments processing
+ALL_VAR=""
+while [ $# != 0 ]; do
+   eval tmp_val_=\"\$$1\"
+   ALL_VAR="$ALL_VAR $1='$tmp_val_'"
+   shift
+done
+
+# Prepare workdir
+cd ${WORKSPACE} || error "Cannot change to $workdir"
+
+
+# ACI Variables
+ALL_VAR="$ALL_VAR BUILD_ID=${BUILD_ID}"
+ALL_VAR="$ALL_VAR WORKSPACE=${WORKSPACE}"
+ALL_VAR="$ALL_VAR SVN_REVISION=${SVN_REVISION}"
+ALL_VAR="$ALL_VAR JOB_NAME=${JOB_NAME}"
+
+# Backward compatibility variables
+ALL_VAR="$ALL_VAR SID=${SID}"
+ALL_VAR="$ALL_VAR DEBUG=$DEBUG"
+ALL_VAR="$ALL_VAR DATE=${BUILD_ID}"
+ALL_VAR="$ALL_VAR PNAME=${JOB_NAME}"
+ALL_VAR="$ALL_VAR WORKDIR=${WORKSPACE}"
+ALL_VAR="$ALL_VAR LOGSDIR=${WORKSPACE}/log"
+ALL_VAR="$ALL_VAR ARTIFACTSDIR=${WORKSPACE}/artifacts"
+ALL_VAR="$ALL_VAR ACI_ROOT_DIR=${aci_workdir}"
+ALL_VAR="$ALL_VAR unique=$unique"
+ALL_VAR="$ALL_VAR branch=${branch}"
+ALL_VAR="$ALL_VAR module=${module}"
+
+
+
+# Prepare artifacts and logs dir
+[ -d artifacts ] && rm -rf artifacts
+[ -d log ] && rm -rf log
+mkdir artifacts
+mkdir log
+
+# First extract ccconfig and deptools
+${aci_workdir}/scripts/extract_deptools || error "extraction of deptools failed"
+
+DEP_FILE=${aci_workdir}/references/DEPENDENCIES
+normalized_branch=`echo $branch | sed 's![^_a-zA-Z0-9]!-!g'`
+[ -f ${aci_workdir}/references/DEPENDENCIES.${normalized_branch} ] && DEP_FILE=${aci_workdir}/references/DEPENDENCIES.${normalized_branch}
+
+# Second extract component
+rm -rf ${comp_valid}
+deptools/extract.sh -d ${DEP_FILE} ${comp_valid} || error "cannot extract ${comp_valid}"
+ 
+# Last run component validation
+build_cmd=${comp_valid}/cc_build_and_valid.sh
+[ -x $build_cmd ] || build_cmd=${comp_valid}/cc-build-and-valid.sh
+[ -x $build_cmd ] || build_cmd=${comp_valid}/cc_build.sh
+[ -x $build_cmd ] || build_cmd=${comp_valid}/cc-build.sh
+[ -x $build_cmd ] || build_cmd=${comp_valid}/build_and_valid.sh
+[ -x $build_cmd ] || build_cmd=${comp_valid}/build-and-valid.sh
+[ -x $build_cmd ] || build_cmd=${comp_valid}/build.sh
+[ -x $build_cmd ] || error "build command missing: $build_cmd"
+
+
+# Run build command with standard ACI variables
+if [ "$ssh_machine" != "" ]; then
+  ssh $ssh_machine "cd ${WORKSPACE}; env $ALL_VAR ./$build_cmd "
+elif [ "$use_lsf" != "" ] ; then
+  normalized_branch=`echo $branch | sed 's![^_a-zA-Z0-9]!-!g'`
+  job_dir=`readlink -f /sw/st/gnu_compil/comp/scripts/jobtools`
+  if [ -f ${aci_workdir}/references/jobtools.dep.${d_branch} ] ; then 
+    JOBTOOLS_REF_FILE=${aci_workdir}/references/jobtools.dep.${d_branch}
+    /sw/st/gnu_compil/comp/scripts/deptools/deptools/deptool.py -f ${JOBTOOLS_REF_FILE} extract
+    job_dir=`readlink -f jobtools`
+  fi
+  [ -d $job_dir ] || error "Jobtools are not available" 
+  queue=reg
+  job_submit="${job_dir}/job-submit.sh sid=${SID} queue=$queue cond=RH4_only groupname=${grpname}"
+
+  cmd $job_submit jname=${JOB_NAME} -- env $ALL_VAR ./$build_cmd 
+  # Wait for jobs completion
+  ${job_dir}/job-wait.sh sid=${SID} jname=${grpname}
+  cp ${workdir}/${JOB_NAME}.out ${workdir}/artifacts/
+  ${job_dir}/job-status.sh sid=${SID} jname=${JOB_NAME}
+  [ $? != 0 ] &&  exit 1
+  # Check that valid failed was not issues in logs
+  cat ${workdir}/${JOB_NAME}.out | grep  '[v]alidfailed' >/dev/null && exit 1
+  cat ${workdir}/${JOB_NAME}.out | grep  'potentialfailure' >/dev/null && exit
+else 
+  env $ALL_VAR ./$build_cmd 
+fi

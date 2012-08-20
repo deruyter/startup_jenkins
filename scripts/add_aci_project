@@ -1,0 +1,1012 @@
+#!/bin/sh
+#
+#  Scripts used to register a new ACI project.
+#  The following modules are currently supported:
+#  - open64
+#  - rtk
+#  - stxp70-nightly
+#  - gcc
+#
+# Note: To perform a dryrun, defines the following environment variable
+#       setenv DRYRUN 1
+#
+fromdir=`pwd`
+mydir=`dirname $0`
+mydir=`(cd $mydir ; pwd)`
+pname=`basename $0`
+DATE=`date +%y%m%d-%H%M`
+
+ADD_ACI_PROJECT_COMMAND="$0 $*"
+
+SVN_HCONFIG=https://codex.cro.st.com/svnroot/aci/hconfig/trunk/projects
+
+SVN_ROOT=https://codex.cro.st.com/svnroot
+GBU_SVN_ROOT=$SVN_ROOT/gbu
+OPEN64_SVN_ROOT=$SVN_ROOT/open64
+NEWLIB_SVN_ROOT=$SVN_ROOT/newlib
+
+DEFAULT_PREPARE_RELEASE_OPTS="-usesourcebranch -nobranch -dummy -nocheck -aci -dep"
+DEFAULT_RELEASE_OPTS="-aci -sshauto -rebuild -dummy -linux -lsf -retry -no-corxpert"
+
+#
+# Create working directory
+#
+tmpdir=/tmp/addnewproject-$$
+rm -rf $tmpdir
+mkdir -p $tmpdir
+cd $tmpdir
+
+#
+# Read arguments
+#
+. $mydir/readargs.sh
+if [ "x$module" = "x" ]; then
+    no_default_module=1
+    module=open64
+else
+    case $module in
+        "open64"|"rtk"|"stxp70-nightly"|"gcc") ;;
+        *) printHelp
+            error "Unknown module '$module' specified."
+            ;;
+    esac
+fi
+
+
+##==============================================================================
+##==============================================================================
+##
+##  Display help message. The listed options depend on the module.
+##
+##==============================================================================
+##==============================================================================
+printHelp() {
+    #
+    # Display help header
+    #
+    cat <<EOF
+ Usage: $0 option=value...
+
+Attach a SVN branch to the Hudson project.
+Project console available at: http://gnx5796.gnb.st.com:8000/
+
+EOF
+    if [ "$no_default_module" ]; then
+        cat <<EOF
+Please specify the module to have the complete list of options:
+
+  module=<module>	Module to register (open64, rtk, stxp70-nightly, gcc)
+			Default is open64.
+
+EOF
+        return
+    fi
+
+    if [ "x$module" = "xopen64" -o "x$module" = "xrtk" ]; then
+        #
+        # Display rtk and open64 specific options
+        #
+        cat <<EOF
+Mandatory Options:
+-----------------
+  branch=<branch>	$module branch to monitor. Mandatory.
+  			(example: stxp70/main or trunk)
+
+  target=<name>		Target to monitor. Mandatory.
+			(supported targets: st200, stxp70, stxp70v4, arm, all)
+
+Other Options:
+-------------
+  short_valid={0|1|2|3}
+  			Set to 0 for creating a long  valid project.
+			Set to 1 for creating a short valid project.
+			Set to 2 for creating a tiny  valid project.
+			Set to 3 for creating a rtk   valid project.
+			Default value is 1 (short project).
+
+  parent=<branch> 	
+  baseline=<revision>
+			Reference branch and revision to assume for build, validation, perf
+			Optional for svnbranch managed projects.
+			Default to svnbranch parent and baseline.
+
+  refrelease=<branch> 	Reference branch for build (affects the reference toolset used).
+			Optional for svnbranch managed projects.
+			Default to svnbranch parent.
+
+  ref_parent=<branch> 	
+  ref_baseline=<revision>
+			Reference branch and revision for validation (affects the set of validations to run).
+			Optional for svnbranch managed projects.
+			Default to svnbranch parent and baseline.
+
+  perf_parent=<branch> 	
+  perf_baseline=<revision>
+			Reference branch and revision for performance comparisons (affects the performance comparisons).
+			Optional for svnbranch managed projects.
+			Default to svnbranch parent and baseline.
+
+EOF
+
+        #
+        # Display rtk Specific Options
+        #
+        if [ "x$module" = "xrtk" ]; then
+            cat <<EOF
+  o64_branch=<branch>
+  o64_baseline=<revision>
+			Reference open64 branch used when creating aci project for a rtk module.
+			Default to trunk@HEAD.
+
+EOF
+       
+        fi
+    fi
+
+    #
+    # Display stxp70-nightly Specific Options
+    #
+    if [ "x$module" = "xstxp70-nightly" ]; then
+        cat <<EOF
+Mandatory Options:
+-----------------
+  branch=<branch>       release-scripts branch to be used when building the nightly release.
+
+  ref_toolset=<toolset> reference toolset used to build the test toolset.
+                        The path must be absolute.
+
+  basename=<name>       identifier used to name the newly create aci project.
+
+  valid_type=<type>     Specify which validation should be launched after the build of the toolset.
+                        <type> = none    : No validation
+                        <type> = standard: Launch V3 and V4 DUAL validation after each build
+                        <type> = full    : Extend 'standard' validation to V4 single and V4 novliw
+                                           configurations, and also tests MPx, MPxFractGen, MPxETSI.
+                                           Note that the additional validations are conditionally
+                                           launched depending on the day of the week, and that a
+                                           full week is required to test all configurations.
+
+Other Options:
+-------------
+  o64_branch=<branch>	open64 branch to be used when building the nightly release.
+			If not defined, the branch name will be retrieved from env.sh file
+                        located in release-scripts.
+
+  gbu_branch=<branch>	GBU branch to be used when building the nightly release.
+			If not defined, the branch name will be retrieved from env.sh file
+                        located in release-scripts.
+
+  newlib_branch=<branch>
+                        newlib branch to be used when building the nightly release.
+			If not defined, the branch name will be retrieved from env.sh file
+                        located in release-scripts.
+
+  nightly_mode={0|1}    If set to 1, the nighly mode will be enabled for this project, meaning
+                        that some specific settings are applied depending on the day of the week.
+                        (for instance, the compiler will be built in release mode on Friday night).
+                        A status mail will also be sent after each run to the nightly mailing list:
+                        stxp70cc-nightlies@lists.codex.cro.st.com
+EOF
+       
+    fi
+
+    #
+    # Display gcc Specific Options
+    #
+	if [ "x$module" = "xgcc" ]; then
+        cat <<EOF
+Mandatory Options:
+-----------------
+  branch=<branch>	$module branch to monitor. Mandatory.
+  			(example: 4.5_devs)
+
+Other Options:
+-------------
+  target=<name>		Target to monitor. Mandatory.
+			(targets: st40, arm, all)
+
+  short_valid={0|1|2|3}
+  			Set to 0  for creating a long  valid project.
+			Set to 1  for creating a short valid project.
+			Set to 2  for creating a tiny  valid project.
+			Set to 3  for creating a test  valid project.
+			Default value is 1 (short project).
+
+  parent=<branch> 	
+  baseline=<revision>
+			Reference branch and revision to assume for build, validation, perf
+			Optional for svnbranch managed projects.
+			Default to svnbranch parent and baseline.
+
+  refrelease=<branch> 	Reference branch for build (affects the reference toolset used).
+			Optional for svnbranch managed projects.
+			Default to svnbranch parent.
+
+  ref_parent=<branch> 	
+  ref_baseline=<revision>
+			Reference branch and revision for validation (affects the set of validations to run).
+			Optional for svnbranch managed projects.
+			Default to svnbranch parent and baseline.
+
+  perf_parent=<branch> 	
+  perf_baseline=<revision>
+			Reference branch and revision for performance comparisons (affects the performance comparisons).
+			Optional for svnbranch managed projects.
+			Default to svnbranch parent and baseline.
+EOF
+	fi
+
+
+    #
+    # Display Common Optional Options
+    #
+    cat <<EOF
+  username=<login>
+		   	Needed to send mail (default for you is [$USERNAME])
+
+  build_host={linux} 	Specify the build host. Currently only linux host supported.
+  			Default to linux.
+
+  assigned_node=<name>  Specify the name of the node on which the build should be performed.
+
+  projectname=<projectname>
+  			Give a project name to hudson. By default this option should not be used.
+
+  unique=<unique_suffix>
+  			Add unique_suffix to the projectname. Useful to monitor a branch already monitored by hudson.
+
+  debug={0|1}
+			Set the project in debug mode if 1.
+                        Default is 0.
+
+  replace={0|1}         Allow replacement of existing projects.
+                        Default is 0.
+
+Example:
+-------
+EOF
+
+    #
+    # Display an example based on the module
+    #
+    case $module in
+        "open64")
+            cat <<EOF
+   $0 module=open64 branch=fixes/codex-25628 target=all
+
+       -> Create new projects to validate open64 branch 'fixes/codex-25628' on all targets
+          (stxp70, st200, arm) and in both short and long validations
+
+EOF
+            ;;
+        "rtk")
+            cat <<EOF
+   $0 module=rtk target=all branch=fixes/codex-12345
+
+       -> Create new projects to validate rtk branch 'fixes/codex-12345'
+          for the 2 xp70 architecture (V3 and V4)
+
+EOF
+            ;;
+        "stxp70-nightly")
+            cat <<EOF
+   $0  module=stxp70-nightly  basename=testlib  branch=trunk  \ 
+                     ref_toolset=/sw/st_division/cpt/stxp70/rhel/STxP70_Toolset_2010.2_Patched
+
+       -> Create new projects to build and validate a xp70 toolset on a nightly basis,
+          using branch 'trunk' of the stxp70-release scripts.
+          Branches used for the toolset components (open64, gbu, ...) are retrieved 
+          from the release script configuration file 'env.sh'.
+          The specified 'ref_toolset' will be used to build the test toolset.
+
+   $0 module=stxp70-nightly  basename=testlib-gre  branch=branches/br80/dev_release_hudson_display \ 
+                     ref_toolset=/sw/st_division/cpt/stxp70/rhel/STxP70_Toolset_2010.2_Patched     \ 
+                     o64_branch=trunk  gbu_branch=branches/int-stxp70
+
+       -> Create new projects to build and validate a xp70 toolset on a nightly basis,
+          using branch 'branches/br80/dev_release_hudson_display' of the stxp70-release scripts.
+          - The 'trunk' branch of the open64 will be used,
+          - The 'int-stxp70' branch of the GBU will be used,
+          - The branch of the RTK to be used will be retreived from the DEPENDENCIES file of the open64
+            branch (because the user has explicitly defined the open64 branch to be used).
+          The specified 'ref_toolset' will be used to build the test toolset.
+
+          open64 compiler to be used, then the RTK will be 
+          Branches used for the toolset components (open64, gbu, ...) are retrieved 
+          from the release script configuration file 'env.sh'.
+          The specified 'ref_toolset' will be used to build the test toolset.
+
+EOF
+		  ;;
+        "gcc")
+            cat <<EOF
+   $0 module=gcc branch=4.5_devs target=st40 short_valid='0 1'
+
+       -> Create new projects to validate gcc branch '4.5_devs' on st40 target
+          and in both tiny, short and long validations
+EOF
+            ;;
+    esac
+
+
+cat <<EOF
+Ref to the the documentation at:
+https://codex.cro.st.com/wiki/index.php?pagename=Branch%20Under%20CruiseControl&group_id=440
+
+EOF
+} 
+
+
+##==============================================================================
+##==============================================================================
+##
+## Raise an error
+##
+##==============================================================================
+##==============================================================================
+echo_error() {
+    echo  "ERROR: " $1 >&2
+    error "ERROR: " $1
+}
+
+
+##==============================================================================
+##==============================================================================
+##
+##  Normalize a branch name specified by the user.
+##
+##  -> If the branch is 'trunk', return it as is.
+##  -> Otherwise insure that branch name is prefixed by 'branches/' and
+##     the potentially updated banch name.
+##
+##==============================================================================
+##==============================================================================
+normalize_branch_name() {
+    TMP_BNAME=$1
+    if [ "$TMP_BNAME" != "trunk" ]; then
+        TMP_BNAME=`echo $TMP_BNAME | sed 's|^branches/||'`
+        TMP_BNAME=branches/$TMP_BNAME
+    fi
+    echo $TMP_BNAME
+}
+
+
+##==============================================================================
+##==============================================================================
+##
+##  Check the validity of the SVN path specified by the concatenation of $1 and $2
+##  -> Raise an error if not valid
+##
+##==============================================================================
+##==============================================================================
+check_svn_access() {
+    svn ls $1/$2 >/dev/null 2>&1
+    if [ $? != 0 ]; then
+        echo "error: failed command: svn ls $1/$2" >&2
+        error "'$2' does not exit in '$1'"
+    fi
+}
+
+
+##==============================================================================
+##==============================================================================
+##
+##  Move the provided aci project ($1) into the destination name ($2) and add
+##  it to SVN.
+##  If the project already exists and replacement option has not been defined,
+##  an error is raised.
+##
+##==============================================================================
+##==============================================================================
+add_aci_project_in_svn() {
+    SRC_FILE=$1
+    TGT_FILE=$2
+
+    if [ "x$replace" = "x" ] && [ -f $TGT_FILE ]; then
+        error "Cannot create project ${build_projectname} because it already exists in SVN repository!
+
+  Use option 'replace=1' to force the replacement of the existing project
+"
+    fi
+    mv $SRC_FILE $TGT_FILE
+    chmod 644 $TGT_FILE
+    svn add $TGT_FILE >/dev/null 2>/dev/null
+}
+
+
+##==============================================================================
+##==============================================================================
+##
+## Create ACI project xml files for either RTK or Open64 modules.
+##
+##==============================================================================
+##==============================================================================
+process_open64_rtk_module() {
+    command_options="username=$a_username"
+    command_options="$command_options build_host=$a_build_host"
+    command_options="$command_options module=$module"
+    [ "x$unique" != "x" ] && command_options="$command_options unique=$unique"
+    [ "x$debug" != "x" ] && command_options="$command_options debug=$debug ${module}_build=gnu-debug unique=debug"
+    
+    ########################################## 
+    #        Add Validation projects         #
+    ##########################################
+    
+##### for my_target in $target ; do
+    for my_short_valid in $a_short_valid ; do
+        case $my_short_valid in
+            "0") postfix="long"
+                interval="0 0,2,4,18,20,22 * * *";;
+            "1") postfix="short"
+                interval="*/10 8-18 * * *";;
+            "2") postfix="tiny"
+                interval="*/5 * * * *";;
+            "3") postfix="rtkvalid"
+                interval="*/10 8-18 * * *";;
+            *) printHelp
+                error "cannot determine validation type (short/long/tiny)";;
+        esac
+        [ "x$projectname" = "x" -a "$debug" != "" ] && projectname="${module}-debug-${br_name}-${postfix}"
+        [ "x$projectname" = "x" ] && projectname="${module}-${br_name}-${postfix}"
+        [ "x$unique" != "x" ] && projectname=$projectname-$unique
+        
+        svnrepos=$module_svn_root/$branchdir
+        check_svn_access $module_svn_root $branchdir
+
+        command="branch=${branch} short_valid=${my_short_valid} ${command_options}"
+        
+        sed \
+            -e "s!__CMD_LINE__!$command!g" \
+            -e "s!__USER_MAIL__!$mail_address!g" \
+            -e "s!__DESCRIPTION__!Validation of ${module} $branch for target $my_target in mode ${postfix} !g" \
+            -e "s!__ASSIGNED_NODE__!$node_to_use!g" \
+            -e "s!__SVN_REPOS__!$svnrepos!g" \
+            -e "s!__MODULE__!${module}!g" \
+            -e "s!__SVN_MODULE__!${svn_module_name}!g" \
+            -e "s!__TRIGGER__!$interval!g" \
+            < $mydir/templates/template_${module}.xml > config.tmp
+        
+        if [ "$module" = "rtk" ]; then
+            sed \
+                -e "s!__RTK_BRANCH__!${branch}!g" \
+                -e "s!__OPEN64_BRANCH__!${o64_branch}!g" \
+                < config.tmp > config2.tmp
+            mv config2.tmp config.tmp
+        fi
+        
+        add_aci_project_in_svn config.tmp hconfig_projects/${projectname}
+        projectname=""
+    done
+}
+
+
+##==============================================================================
+##==============================================================================
+##
+## Create ACI project xml files for stxp70-nightly module.
+##
+##==============================================================================
+##==============================================================================
+process_stxp70_nightly() {
+    prepare_release_opts=$DEFAULT_PREPARE_RELEASE_OPTS
+    release_opts=$DEFAULT_RELEASE_OPTS
+
+    if [ "x$projectname" != "x" ]; then
+        base_projectname=${projectname}
+    else
+        base_projectname="stxp70-nightly-${a_username}-${basename}"
+    fi
+    [ "x$debug" != "x" ] && base_projectname="${base_projectname}-debug"
+    build_projectname="${base_projectname}-build"
+    [ "x$unique" != "x" ] && build_projectname="$build_projectname-$unique"
+
+    if [ "$nightly_mode" = "1" ]; then
+        mail_address="${mail_address},stxp70cc-nightlies@lists.codex.cro.st.com"
+        nightly_mode_bool="true"
+    else
+        nightly_mode_bool="false"
+    fi
+
+    # Special case for nightly project: unless explicitly specified, the nightly projects
+    # are created on Crolles site. This is done because when validations are enabled, the 
+    # LSF usage is very high and we don't want to interfer with standard open64 validations
+    # running on Grenoble site.
+    if [ "$assigned_node" = "" ]; then
+        node_to_use="<assignedNode>stxp70_nightlies</assignedNode>\n  <canRoam>false</canRoam>"
+    fi
+
+    # Sanity check: by default, do not allow creating 2 nightly projects with
+    # the same 'basename'. This is done because the basename is used as an id
+    # to store validation results. 
+    cro_perf_dir="/sw/st/gnu_compil/stxp70work/aci/results/performance/linux/stxp70-nightly"
+    gre_perf_dir="/prj/aci-storage/performance/linux/stxp70-nightly"
+    if [ "x$replace" = "x" ]; then
+        if [ -d "${cro_perf_dir}/${basename}" ] ||
+           [ -d "${gre_perf_dir}/${basename}" ] ||
+           [ "`list_aci_project -module=stxp70-nightly -pattern=${basename}-build`" != "" ]; then
+            echo_error "An existing or previously defined stxp70-nightly project was already using '${basename}' as identifier. Please choose another basename or use 'replace=1' to force using this basename. (Note: the basename is used to identify validation results and should then be unique)"
+        fi
+    fi
+
+    #
+    # Define validation configurations and validations to launch for each day
+    #
+    # TODO: Might be better to create all validation projects even
+    #       if the validation is 'none' or 'standard', so that the
+    #       validation can be enabled later on through the jenkins GUI.
+    #
+    nb_config=0
+    mon_valid=""
+    tue_valid=""
+    wed_valid=""
+    thu_valid=""
+    fri_valid=""
+    sat_valid=""
+    sun_valid=""
+    if [ "$valid_type" = "standard" -o "$valid_type" = "full" ]; then
+
+        mon_valid="V3,V4_DUAL"
+        tue_valid="V3,V4_DUAL"
+        wed_valid="V3,V4_DUAL"
+        thu_valid="V3,V4_DUAL"
+        fri_valid="V3,V4_DUAL"
+
+        env_options="username=$a_username build_host=$a_build_host module=$module"
+        # In order to use specific version of the open64_valid scripts, change 
+        # the branch argument below and modify the associated
+        # references/DEPENDENCIES.tt2-dev-stxp70-nightlies in the trunk of HCONFIG
+        # scripts
+#        env_options="branch=tt2/dev-stxp70-nightlies short_valid=1 $env_options"
+        env_options="branch=trunk short_valid=1 $env_options"
+
+        CONFIG_NAME[$nb_config]="V3"
+        CONFIG_ARCH[$nb_config]="STxP70V3"
+        ((nb_config++))
+        CONFIG_NAME[$nb_config]="V4_DUAL"
+        CONFIG_ARCH[$nb_config]="STxP70V4"
+        ((nb_config++))
+
+        if [ "$valid_type" = "full" ]; then
+
+            mon_valid=$mon_valid",V3_MPX_FRACT"
+            tue_valid=$tue_valid",V4_DUAL_MPX_FRACT"
+            wed_valid=$wed_valid",V3_MPX_ETSI"
+            thu_valid=$thu_valid",V4_DUAL_MPX_ETSI"
+            fri_valid=$fri_valid",V3_MPX"
+            sat_valid=$sat_valid",V4_DUAL_MPX,V4_SINGLE_MPX"
+            sun_valid=$sun_valid",V4_NOVLIW,V4_NOVLIW_MPX"
+
+            CONFIG_NAME[$nb_config]="V4_SINGLE"
+            CONFIG_ARCH[$nb_config]="STxP70V4"
+            ((nb_config++))
+            CONFIG_NAME[$nb_config]="V4_NOVLIW"
+            CONFIG_ARCH[$nb_config]="STxP70V4"
+            ((nb_config++))
+            #
+            CONFIG_NAME[$nb_config]="V3_MPX"
+            CONFIG_ARCH[$nb_config]="STxP70V3"
+            ((nb_config++))
+            CONFIG_NAME[$nb_config]="V4_DUAL_MPX"
+            CONFIG_ARCH[$nb_config]="STxP70V4"
+            ((nb_config++))
+            CONFIG_NAME[$nb_config]="V4_SINGLE_MPX"
+            CONFIG_ARCH[$nb_config]="STxP70V4"
+            ((nb_config++))
+            CONFIG_NAME[$nb_config]="V4_NOVLIW_MPX"
+            CONFIG_ARCH[$nb_config]="STxP70V4"
+            ((nb_config++))
+            #
+            CONFIG_NAME[$nb_config]="V3_MPX_FRACT"
+            CONFIG_ARCH[$nb_config]="STxP70V3"
+            ((nb_config++))
+            CONFIG_NAME[$nb_config]="V4_DUAL_MPX_FRACT"
+            CONFIG_ARCH[$nb_config]="STxP70V4"
+            ((nb_config++))
+            #
+            CONFIG_NAME[$nb_config]="V3_MPX_ETSI"
+            CONFIG_ARCH[$nb_config]="STxP70V3"
+            ((nb_config++))
+            CONFIG_NAME[$nb_config]="V4_DUAL_MPX_ETSI"
+            CONFIG_ARCH[$nb_config]="STxP70V4"
+            ((nb_config++))
+        fi
+    fi
+
+    #
+    # Create the validation projects
+    #
+    i=0
+    while [ $i -lt $nb_config ]; do
+        valid_projectname="${base_projectname}-valid-${CONFIG_NAME[$i]}"
+        [ "x$unique" != "x" ] && valid_projectname=$valid_projectname-$unique
+        
+        sed \
+            -e "s!__ARCHI_NAME__!${CONFIG_ARCH[$i]}!g" \
+            -e "s!__USER_MAIL__!${mail_address}!g" \
+            -e "s!__BUILD_PROJECT_NAME__!${build_projectname}!g" \
+            -e "s!__RUNVALID_WORKDIR__!test_RunValid_${CONFIG_NAME[$i]}!g" \
+            -e "s!__ASSIGNED_NODE__!${node_to_use}!g" \
+            -e "s!__ENV_OPTIONS__!${env_options}!g" \
+            -e "s!__ACI_CONFIG_MODE__!nightly_${CONFIG_NAME[$i]}!g" \
+            -e "s!__NIGHTLY_NAME__!${basename}!g" \
+            < $mydir/templates/template_stxp70_nightly_valid.xml > config.tmp
+
+        add_aci_project_in_svn config.tmp hconfig_projects/${valid_projectname}
+
+#        if [ $i -eq 0 ]; then
+#            child_projects="$valid_projectname"
+#        else
+#            child_projects="$child_projects,$valid_projectname"
+#        fi
+
+        valid_projectname=""
+        ((i++))
+    done
+
+    #
+    # Create the build project
+    #
+    sed \
+        -e "s!__RELEASE_SCRIPT_BRANCH__!$branchdir!g" \
+        -e "s!__OPEN64_SOURCE_BRANCH__!${o64_branch}!g" \
+        -e "s!__GBU_SOURCE_BRANCH__!${gbu_branch}!g" \
+        -e "s!__NEWLIB_SOURCE_BRANCH__!${newlib_branch}!g" \
+        -e "s!__REFERENCE_TOOLSET__!${ref_toolset}!g" \
+        -e "s!__NIGHTLY_MODE__!${nightly_mode_bool}!g" \
+        -e "s!__VERSION_MAJOR__!2012!g" \
+        -e "s!__VERSION_MINOR__!2!g" \
+        -e "s!__VERSION_MICRO__!3!g" \
+        -e "s!__USER_MAIL__!${mail_address}!g" \
+        -e "s!__PREPARE_RELEASE_OPTIONS__!${prepare_release_opts}!g" \
+        -e "s!__RELEASE_OPTIONS__!${release_opts}!g" \
+        -e "s!__CHILD_PROJECTS__!${child_projects}!g" \
+        -e "s!__ASSIGNED_NODE__!${node_to_use}!g" \
+        -e "s!__MONDAY_VALID__!${mon_valid}!g" \
+        -e "s!__TUESDAY_VALID__!${tue_valid}!g" \
+        -e "s!__WEDNESDAY_VALID__!${wed_valid}!g" \
+        -e "s!__THURSDAY_VALID__!${thu_valid}!g" \
+        -e "s!__FRIDAY_VALID__!${fri_valid}!g" \
+        -e "s!__SATURDAY_VALID__!${sat_valid}!g" \
+        -e "s!__SUNDAY_VALID__!${sun_valid}!g" \
+        < $mydir/templates/template_stxp70_nightly_build.xml > config.tmp
+
+    add_aci_project_in_svn config.tmp hconfig_projects/${build_projectname}
+    build_projectname=""
+}
+
+##==============================================================================
+##==============================================================================
+##
+## Create ACI project xml files for gcc module.
+##
+##==============================================================================
+##==============================================================================
+process_gcc_module() {
+
+	echo "Regenerating projects:"
+	echo "---------------------"
+	
+#	echo " -> ${a_target}"
+	if [ "x$a_target" == "xcheck_svn" ]; then
+	  svn export ${SVN_ROOT}/sh4gcc/branches/${branch}/aci/TARGETS $tmpdir/TARGETS >& /dev/null
+      if [ $? != 0 ]; then
+        a_target="all"
+      else
+	    a_target=`cat $tmpdir/TARGETS`
+	  fi
+    fi
+#	echo " -> ${a_target}"
+	[ "x$a_target" == "xall" ] && a_target="st40 arm"
+
+	command_options="$command_options username=$a_username"
+    command_options="$command_options build_host=$a_build_host"
+    command_options="$command_options module=$module"
+	
+    [ "x$unique" != "x" ] && command_options="$command_options unique=$unique"
+    [ "x$debug" != "x" ] && command_options="$command_options debug=$debug"
+    
+#	echo " -> ${a_target}"
+
+    ########################################## 
+    #        Add Validation projects         #
+    ##########################################
+	
+    for my_target in $a_target ; do
+        for my_short_valid in $a_short_valid ; do
+            case $my_short_valid in
+            	"0") postfix="long"
+                	interval="0 0,2,4,18,20,22 * * *";;
+            	"1") postfix="short"
+                	interval="0 8-18 * * *";;
+            	"2") postfix="tiny"
+                	interval="* 8-18 * * *";;
+            	"3") postfix="test"
+                	interval="";;
+            	*) printHelp
+                	error "cannot determine validation type (short/long/tiny)";;
+            esac
+            [ "x$projectname" = "x" -a "$debug" != "" ] && projectname="debug-${my_target}-${module}-${br_name}-${postfix}"
+            [ "x$projectname" = "x" ] && projectname="${my_target}-${module}-${br_name}-${postfix}"
+            [ "x$unique" != "x" ] && projectname=$projectname-$unique
+            
+            command="target=${my_target} branch=${branch} short_valid=${my_short_valid} ${command_options}"
+			
+            sed \
+                -e "s!__SVN_BRANCH__!${branch}!g" \
+            	-e "s!__MODULE__!${module}!g" \
+    	        -e "s!__SVN_ROOT__!${module_svn_root}!g" \
+	            -e "s!__SVN_MODULE__!${svn_module_name}!g" \
+                -e "s!__CMD_LINE__!$command!g" \
+                -e "s!__USER_MAIL__!$mail_address!g" \
+                -e "s!__DESCRIPTION__!Validation of ${module} $branch for target $my_target in mode ${postfix} !g" \
+                -e "s!__ASSIGNED_NODE__!$node_to_use!g" \
+	            -e "s!__TRIGGER__!$interval!g" \
+	            -e "s!__ADD_ACI_PROJECT_COMMAND__!$ADD_ACI_PROJECT_COMMAND!g" \
+                < $mydir/templates/template_gcc_$my_target.xml > config.tmp
+            
+			echo " - ${projectname}"
+            add_aci_project_in_svn config.tmp hconfig_projects/${projectname}
+
+            projectname=""
+        done
+    done
+	
+	echo ""
+
+}
+
+
+
+################################################################################
+##
+##
+## Beginning of the real job
+##
+##
+################################################################################
+
+# Get user name
+a_username="$USERNAME"
+[ "x$username" != "x" ] && a_username="$username"
+[ "x$a_username" = "x" ] && a_username="$USER"
+if [ "x$a_username" = "x" ]; then
+    printHelp
+    error "cannot find user name (USERNAME/USER var is not defined and username option is not passed, need it to send validation mail)"
+fi
+
+a_build_host=linux
+[ "x$build_host" != "x" ] && a_build_host="$build_host"
+
+[ "$debug" = "0" ] && debug=
+[ "$replace" = "0" ] && replace=
+
+# Check that branch is defined, and remove optional 'branches' prefix
+if [ "x$branch" = "x" ]; then
+    printHelp
+    error "no branch selected"
+fi
+branch=`echo $branch | sed 's|^branches/||'`
+
+case $module in
+    "open64"|"rtk")
+        if [ "x$target" = "x" ]; then
+            printHelp
+            error "no target selected"
+        fi
+        # here the branch used to build the toolset and compare result with. Must be one of $mydir/config/reference-release-*
+        [ "x$parent" != "x" ] && a_parent="$parent"
+        [ "x$baseline" != "x" ] && a_baseline="$baseline"
+       
+        a_refrelease="$a_parent"
+        [ "x$refrelease" != "x" ] && a_refrelease="$refrelease"
+        
+        a_ref_parent="$a_parent"
+        [ "x$ref_parent" != "x" ] &&  a_ref_parent="$ref_parent"
+        
+        a_ref_baseline="$a_baseline"
+        [ "x$ref_baseline" != "x" ] &&  a_ref_baseline="$ref_baseline"
+        
+        a_perf_parent="$a_parent"
+        [ "x$perf_parent" != "x" ] && a_perf_parent="$perf_parent"
+        
+        a_perf_baseline="$a_baseline"
+        [ "x$perf_baseline" != "x" ] && a_perf_baseline="$perf_baseline"
+        ;;
+    "stxp70-nightly")
+        if [ "x$basename" = "x" ]; then
+            printHelp
+            error "no basename provided"
+        fi
+        if [ "x$ref_toolset" = "x" ]; then
+            printHelp
+            error "Missing ref_toolset argument!"
+        else
+            [ -d $ref_toolset ] || error "Specified ref_toolset '$ref_toolset' does not exist"
+        fi
+        ;;
+    "gcc")
+        a_target="check_svn"
+		[ "x$target" != "x" ] && a_target="$target"
+
+        # here the branch used to build the toolset and compare result with. Must be one of $mydir/config/reference-release-*
+        [ "x$parent" != "x" ] && a_parent="$parent"
+        [ "x$baseline" != "x" ] && a_baseline="$baseline"
+       
+        a_refrelease="$a_parent"
+        [ "x$refrelease" != "x" ] && a_refrelease="$refrelease"
+        
+        a_ref_parent="$a_parent"
+        [ "x$ref_parent" != "x" ] &&  a_ref_parent="$ref_parent"
+        
+        a_ref_baseline="$a_baseline"
+        [ "x$ref_baseline" != "x" ] &&  a_ref_baseline="$ref_baseline"
+        
+        a_perf_parent="$a_parent"
+        [ "x$perf_parent" != "x" ] && a_perf_parent="$perf_parent"
+        
+        a_perf_baseline="$a_baseline"
+        [ "x$perf_baseline" != "x" ] && a_perf_baseline="$perf_baseline"
+        ;;
+    *) ;;
+esac
+
+
+#########################################
+#   Setup based on module to register   #
+#########################################
+
+a_short_valid="1"
+case $module in
+    "open64")
+        module_svn_root="$SVN_ROOT/open64"
+        svn_module_name="open64"
+        case $target in
+            "all")
+                target="stxp70 stxp70v4 st200 arm"
+                a_short_valid="0 1"
+                ;;
+            "stxp70" | "stxp70v4" | "st200" | "arm")
+                ;;
+            *)
+                echo_error "failed command: Unsupported target '$target' for module '$module'"
+                ;;
+        esac
+        o64_branch=$branch
+        ;;
+    
+    "rtk")
+        module_svn_root="$SVN_ROOT/stxp70cc/stxp70-binutils"
+        svn_module_name="stxp70cc"
+        case $target in
+            "all")
+                target="stxp70 stxp70v4"
+                ;;
+            "stxp70" | "stxp70v4")
+                ;;
+            *)
+                echo_error "failed command: Unsupported target '$target' for module '$module'"
+                ;;
+        esac
+        a_short_valid="3"
+        if [ "x$o64_branch" = "x" ]; then
+            o64_branch=trunk
+        else
+            o64_branch=`normalize_branch_name $o64_branch`
+            check_svn_access $OPEN64_SVN_ROOT $o64_branch 
+        fi
+        rtk_branch=$branch
+        if [ "x$unique" = "x" ]; then
+            unique="rtk"
+        fi
+        ;;
+
+    "stxp70-nightly")
+        module_svn_root="$SVN_ROOT/stxp70cc/stxp70-release"
+        svn_module_name="stxp70cc"
+        if [ "x$o64_branch" != "x" ]; then
+            o64_branch=`normalize_branch_name $o64_branch`
+            check_svn_access $OPEN64_SVN_ROOT $o64_branch
+        fi
+        if [ "x$gbu_branch" != "x" ]; then
+            gbu_branch=`normalize_branch_name $gbu_branch`
+            check_svn_access $GBU_SVN_ROOT $gbu_branch
+        fi
+        if [ "x$newlib_branch" != "x" ]; then
+            newlib_branch=`normalize_branch_name $newlib_branch`
+            check_svn_access $NEWLIB_SVN_ROOT $newlib_branch
+        fi
+        if [ "x$valid_type" = "x" ]; then
+            printHelp
+            error "no valid_type provided"
+        elif [ "$valid_type" != "none" -a "$valid_type" != "standard" -a "$valid_type" != "full" ]; then
+            error "Unexpected valid_type value '$valid_type'. Supported values are 'none', 'standard', 'full'"
+        fi
+        ;;
+    "gcc")
+		a_short_valid="0 1"
+        module_svn_root="$SVN_ROOT/sh4gcc"
+        svn_module_name="gcc"
+        gcc_branch=$branch
+        ;;
+    *)
+	
+        echo_error "Unknown module name '$module'"
+        ;;
+esac
+
+[ "x$short_valid" != "x" ] && a_short_valid="$short_valid"
+# [ "x$dependency_file" != "x" ] && a_dependency_file="$dependency_file"
+
+
+########################################## 
+#         Global computations            #
+##########################################
+
+# Check access to SVN repository
+branchdir=`normalize_branch_name $branch`
+check_svn_access $module_svn_root $branchdir
+
+br_name=`echo $branch | sed 's/[^_a-zA-Z0-9]/-/g'`
+
+# Extract hudson config files
+svn co -N ${SVN_HCONFIG} hconfig_projects >/dev/null 2>&1
+if [ $? != 0 ]; then
+    echo_error "failed command: svn co -N ${SVN_HCONFIG} hconfig_projects"
+fi
+
+# Determine hudson node to be used
+if [ "$assigned_node" != "" ]; then
+    node_to_use="<assignedNode>${assigned_node}</assignedNode>\n  <canRoam>false</canRoam>"
+elif [ `grep "$a_username" $mydir/mapuser.txt | grep "loc_cro"  | wc -l` = 1 ] ; then
+    node_to_use="<assignedNode>Linux_Crolles</assignedNode>\n  <canRoam>false</canRoam>"
+else
+    node_to_use="<canRoam>true</canRoam>"
+fi
+
+# Generate mail notification list
+mail_address=`grep "$a_username" $mydir/mapuser.txt | cut -d= -f 2`
+[ "x$mail_address" = "x" ] && mail_address="aci-cruisecontrol-notifications@lists.codex.cro.st.com"
+
+
+#
+# Apply modifications to hudson config files based on the current module
+#
+case $module in
+    open64 | rtk)
+        process_open64_rtk_module;;
+    stxp70-nightly)
+        process_stxp70_nightly;;
+    gcc)
+        process_gcc_module;;
+esac
+
+
+#
+# Process termination: either commit the changes to SVN or report a status in case of dryrun
+#
+echo "List of created projects:"
+echo "------------------------"
+svn status hconfig_projects
+echo
+
+if [ "$DRYRUN" = "" ]; then
+    svn ci -m "add_aci_project: automatically added projects for branch $branch." hconfig_projects >/dev/null
+    if [ $? != 0 ]; then
+        echo "error: ${SVN_HCONFIG} cannot be written"
+        error "SVN write error. Project not added"
+    fi
+    
+    cd $mydir
+    rm -rf $tmpdir
+    echo ""
+    echo "Project entry for branch $branch succesfully added."
+    echo ""
+else
+    cd $mydir
+    echo ""
+    echo "Dryrun mode. No change done to central repository."
+    echo "Project ready to be commited in '$tmpdir'."
+    echo "Please remove $tmpdir afterward."
+    echo ""
+fi
+

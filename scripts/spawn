@@ -1,0 +1,68 @@
+: # use perl
+  eval 'exec perl -w -S $0 "$@"'
+    if 0;
+
+use strict;
+use Getopt::Long;
+use POSIX ":sys_wait_h";
+use POSIX 'setsid';
+
+Getopt::Long::config(qw(no_ignore_case));
+
+my ($pidfile, $command, $shell, $out, $user, $home, $date, $dir, $opt_n);
+$date=`date`;
+$shell = $ENV{'SHELL'};
+$user = $ENV{'USER'};
+$out = "/home/$user/.spawn.log";
+GetOptions('p=s' => \$pidfile,
+	   'c=s' => \$command,
+	   's=s' => \$shell,
+	   'o=s' => \$out,
+	   'n' => \$opt_n,
+	   'd=s' => \$dir);
+
+die "command not specifiyed (-c option missing)\n" 
+    if !defined($command) && !defined($ARGV[0]);
+die "shell not specified (SHELL not defined and -s option missing)\n"
+    if !defined($shell);
+die "user not specified (USER not defined)\n"
+    if !defined($user);
+$command=join(" ", @ARGV) if !defined($command);
+$out=undef if $opt_n;
+
+#
+# Detach
+#
+sub detach {
+    if (defined($dir)) {
+	chdir $dir or die "Can't chdir to $dir: $!\n";
+    }
+    open(STDIN, "/dev/null") or die "Can't read /dev/null: $!\n";
+    if (!defined($out)) {
+      open(STDOUT, ">/dev/null") or die "Can't read /dev/null: $!\n";
+    } else {
+      open(STDOUT, ">>$out") or die "Can't write to $out: $!\n";
+    }
+    defined(my $pid = fork) or die "Can't fork: $!\n";
+    if ($pid) {
+	print STDERR "detached pid $pid, cmd: $command\n";
+	# Log to $out
+	print "$0: $date";
+	print "$0: launched detached $pid: $command\n";
+	if (defined($pidfile)) {
+	    open(PIDFILE,">$pidfile") or die "Can't open $pidfile: $!\n";
+	    print PIDFILE "$pid\n";
+	    close(PIDFILE);
+	}
+	exit 0;
+    }
+    setsid() or die "Can't start a new session: $!";
+    open(STDERR, ">&STDOUT") or die "Can't dup stdout: $!\n";
+}
+
+
+    
+detach();
+exec($shell, '-c', $command);
+die "couldn't exec:$!\n";
+

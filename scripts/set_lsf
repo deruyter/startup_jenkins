@@ -1,0 +1,11 @@
+set dir=`dirname $0`
+set dir=`cd $dir; pwd`
+which bjobs > /dev/null 
+
+if ($status != 0) then
+    # Set LSF path
+    echo Setting LSF path...
+    setenv ST /sw/st
+    source $ST/init/csh/cshrc
+    source $ST/multi_applis/current/bin/ma_launcher
+endif

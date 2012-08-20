@@ -1,0 +1,117 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <logRotator>
+    <daysToKeep>-1</daysToKeep>
+    <numToKeep>-1</numToKeep>
+    <artifactDaysToKeep>-1</artifactDaysToKeep>
+    <artifactNumToKeep>5</artifactNumToKeep>
+  </logRotator>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>TRIGGERED_BY</name>
+          <description>Reference to the parent job/build that have triggered current build, in the form ${JOB_NAME}/${BUILD_N
+UMBER}. Leave blank if manually executed.</description>
+          <defaultValue></defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>PERF_REF_LIST</name>
+          <description>Names of the projects that should be used to build the performance comparison</description>
+          <defaultValue></defaultValue>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  __ASSIGNED_NODE__
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <triggers class="vector"/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>##
+## [TTh] Small hack to correctly reach the latest Test-Release toolset.
+## Clean solution will be implemented by Raynald
+##
+#cd ${ACI_ROOT_DIR}/../results/compilers/Test-Release-Trunk/toolset
+cd ${ACI_ROOT_DIR}/../results/compilers
+LATEST_RELEASE_DIR=`ls | grep __BUILD_PROJECT_NAME__ | tail -n1`
+cd $LATEST_RELEASE_DIR
+TOOLSET_PATH=${PWD}/toolset
+
+__ARCHI_NAME__=&quot;ON&quot;
+export __ARCHI_NAME__
+
+env __ENV_OPTIONS__ \
+  ${ACI_ROOT_DIR}/scripts/new_build_aci_open64.sh \
+    TOOLSET_PATH=${TOOLSET_PATH} \
+    ACI_CONFIG_MODE=__ACI_CONFIG_MODE__ \
+    NIGHTLY_NAME=__NIGHTLY_NAME__ \
+    SVN_REVISION=99999 \
+    TRIGGERED_BY="${TRIGGERED_BY}" \
+    PERF_REF_LIST="${PERF_REF_LIST}"
+      </command>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers>
+    <hudson.tasks.ArtifactArchiver>
+      <artifacts>artifacts/**</artifacts>
+      <latestOnly>false</latestOnly>
+    </hudson.tasks.ArtifactArchiver>
+    <hudson.plugins.postbuildtask.PostbuildTask>
+      <tasks>
+        <hudson.plugins.postbuildtask.TaskProperties>
+          <logTexts>
+            <hudson.plugins.postbuildtask.LogProperties>
+              <logText></logText>
+              <operator>AND</operator>
+            </hudson.plugins.postbuildtask.LogProperties>
+          </logTexts>
+          <EscalateStatus>false</EscalateStatus>
+          <RunIfJobSuccessful>false</RunIfJobSuccessful>
+          <script>sh -x ${WORKSPACE}/open64_valid/aci_cleanup.sh</script>
+        </hudson.plugins.postbuildtask.TaskProperties>
+      </tasks>
+    </hudson.plugins.postbuildtask.PostbuildTask>
+    <hudson.plugins.summary__report.ACIPluginPublisher>
+      <name>artifacts/*.xml</name>
+    </hudson.plugins.summary__report.ACIPluginPublisher>
+    <hudson.plugins.emailext.ExtendedEmailPublisher>
+      <recipientList>__USER_MAIL__</recipientList>
+      <configuredTriggers>
+        <hudson.plugins.emailext.plugins.trigger.FailureTrigger>
+          <email>
+            <recipientList></recipientList>
+            <subject>$PROJECT_DEFAULT_SUBJECT</subject>
+            <body>$PROJECT_DEFAULT_CONTENT</body>
+            <sendToDevelopers>true</sendToDevelopers>
+            <sendToRequester>false</sendToRequester>
+            <includeCulprits>false</includeCulprits>
+            <sendToRecipientList>true</sendToRecipientList>
+          </email>
+        </hudson.plugins.emailext.plugins.trigger.FailureTrigger>
+        <hudson.plugins.emailext.plugins.trigger.SuccessTrigger>
+          <email>
+            <recipientList></recipientList>
+            <subject>$PROJECT_DEFAULT_SUBJECT</subject>
+            <body>$PROJECT_DEFAULT_CONTENT</body>
+            <sendToDevelopers>true</sendToDevelopers>
+            <sendToRequester>false</sendToRequester>
+            <includeCulprits>false</includeCulprits>
+            <sendToRecipientList>true</sendToRecipientList>
+          </email>
+        </hudson.plugins.emailext.plugins.trigger.SuccessTrigger>
+      </configuredTriggers>
+      <contentType>default</contentType>
+      <defaultSubject>$DEFAULT_SUBJECT</defaultSubject>
+      <defaultContent>$DEFAULT_CONTENT</defaultContent>
+    </hudson.plugins.emailext.ExtendedEmailPublisher>
+  </publishers>
+  <buildWrappers/>
+</project>
