@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+
+ACI_TOOL_NAME=jenkins
+
+ACI_DOMAIN_NAME=__DOMAIN__
+ACI_HOST=__HOST__
+ACI_USER=__USER__
+ACI_URL=__URL__
+ACI_PORT=__PORT__
+ACI_SSH_PORT=__SSH_PORT__
+JAVA=__JAVA__

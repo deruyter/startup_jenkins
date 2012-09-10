@@ -25,17 +25,10 @@ host=`hostname`
 user=$USER
 
  
-###
-#
-# Please add here expected running host/user
-#
-EXPECTED_HOST=gnx5796
-DOMAIN_NAME=gnb.st.com
-EXPECTED_USER=acicecmg
-
 DEF_ACI_ROOT_DIR=`readlink -f $dir/..`
 [ "x$ACI_ROOT_DIR" = "x" ] && ACI_ROOT_DIR=$DEF_ACI_ROOT_DIR
-ACI_TOOL_NAME=jenkins
+
+. ${ACI_ROOT_DIR}/aci_config.sh
 
 LOG="${ACI_ROOT_DIR}/${ACI_TOOL_NAME}.log"
 PIDFILE=$ACI_ROOT_DIR/aci_${host}.pid
@@ -48,17 +41,17 @@ pid_of_aci() {
 
 ###
 # Check whether the machine is the expected one
-if [ "$host" != "$EXPECTED_HOST" -a "x$test" = "x" ]; then
-  echo "$0: expected to be run on $EXPECTED_HOST or in test mode" >&2
-  echo "log first on $EXPECTED_HOST before running" >&2
+if [ "$host" != "$ACI_HOST" -a "x$test" = "x" ]; then
+  echo "$0: expected to be run on $ACI_HOST or in test mode" >&2
+  echo "log first on $ACI_HOST before running" >&2
   exit 1
 fi
 
 ###
 # Check whether the user name is correct
-if [ "$user" != "$EXPECTED_USER" -a "x$test" = "x" ]; then
+if [ "$user" != "$ACI_USER" -a "x$test" = "x" ]; then
   echo "$0: expected to be run as user $EXPEXCTED_USER or in test mode" >&2
-  echo "log first as $EXPECTED_USER before running" >&2
+  echo "log first as $ACI_USER before running" >&2
   exit 1
 fi
 
@@ -91,4 +84,3 @@ echo "Cleaning logs"
 $dir/clean.sh -log
 echo "Launching aci in background"
 exec $dir/spawn -s /bin/sh -n -p $PIDFILE "$MY_ENV $@ 2>&1 | $dir/log_split.sh ${LOG}"
-#exec $dir/spawn -s /bin/sh -n -p $PIDFILE "$MY_ENV $@ 2>&1 > ${LOG}"

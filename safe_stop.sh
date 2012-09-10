@@ -19,8 +19,22 @@ user=$USER
 ACI_ROOT_DIR=${ACI_ROOT_DIR:-$dir}
 PIDFILE=$ACI_ROOT_DIR/aci_${host}.pid
 
-if [ "$host" != "gnx5796" -a "$user" != "acicecmg" -a "$1" != "test" -a "x$test" = "x" ]; then
-  echo "$0: error: must be launched from gnx5796 with username acicecmg" >&2
+. ${ACI_ROOT_DIR}/aci_config.sh
+
+
+###
+# Check whether the machine is the expected one
+if [ "$host" != "$ACI_HOST" -a "x$test" = "x" ]; then
+  echo "$0: expected to be run on $ACI_HOST or in test mode" >&2
+  echo "log first on $ACI_HOST before running" >&2
+  exit 1
+fi
+
+###
+# Check whether the user name is correct
+if [ "$user" != "$ACI_USER" -a "x$test" = "x" ]; then
+  echo "$0: expected to be run as user $EXPEXCTED_USER or in test mode" >&2
+  echo "log first as $ACI_USER before running" >&2
   exit 1
 fi
 
