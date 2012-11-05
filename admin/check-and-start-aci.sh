@@ -83,4 +83,4 @@ cd ${ACI_ROOT_DIR}
 echo "Cleaning logs"
 $dir/clean.sh -log
 echo "Launching aci in background"
-exec $dir/spawn -s /bin/sh -n -p $PIDFILE "$MY_ENV $@ 2>&1 | $dir/log_split.sh ${LOG}"
+exec $dir/spawn -s /bin/sh -n -p $PIDFILE "$MY_ENV $@ 2>&1 | ${ACI_ROOT_DIR}/scripts/log_split.sh ${LOG}"

@@ -29,7 +29,8 @@ JAVA_JDB_DEBUG_OPTIONS="-Xdebug -Xrunjdwp:transport=dt_socket,address=8003,serve
 # uncomment this to activate heap dumps and debug (jdb -attach 8000) support
 #JAVA_OPTIONS="-Xmx8192m $JAVA_HEAP_DEBUG_OPTIONS $JAVA_JDB_DEBUG_OPTIONS"
 # uncomment this for normal (non debug) runnin mode
-JAVA_OPTIONS="-Xmx8192m"
+#JAVA_OPTIONS="-Xmx8192m"
+JAVA_OPTIONS=
 
 WAR="${ACI_ROOT_DIR}/${ACI_TOOL_NAME}.war"
 
