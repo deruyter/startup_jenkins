@@ -17,8 +17,8 @@ dir=`cd $dir; pwd`
 
 . $dir/aci_config.sh
 
-#USE_JAVA_CLI=${USE_JAVA_CLI:-0}
-USE_JAVA_CLI=${USE_JAVA_CLI:-1}
+USE_JAVA_CLI=${USE_JAVA_CLI:-0}
+#USE_JAVA_CLI=${USE_JAVA_CLI:-1}
 error() {
     echo $* >&2
     exit 1
@@ -38,7 +38,7 @@ else
     SERVER_IP_FILE=${SERVER_IP_FILE:-$dir/jenkins.ip}
     if [ "$STRICT" = no ] ; then
       rm -f $KEYFILE
-      MY_IP=`hostname -I | head -1`
+      MY_IP=`hostname -i | head -1`
       [ "$MY_IP" = "" ] && MY_IP=`/sbin/ifconfig  | grep 'inet addr:'| grep -v '127.0.0.1' | cut -d: -f2 | awk '{ print $1}'`
       echo $MY_IP >$SERVER_IP_FILE
     fi
