@@ -15,7 +15,7 @@ set -e
 dir=`dirname $0`
 dir=`cd $dir; pwd`
 
-. ${ACI_ROOT_DIR}/aci_config.sh
+. $dir/aci_config.sh
 
 #USE_JAVA_CLI=${USE_JAVA_CLI:-0}
 USE_JAVA_CLI=${USE_JAVA_CLI:-1}
@@ -31,7 +31,7 @@ if [ "$USE_JAVA_CLI" = 1 ]; then
     aci_cli_tool="$dir/aci_home/war/WEB-INF/${ACI_TOOL_NAME}-cli.jar"
     [ "x$aci_cli_tool" = "x" ] && error "Unable to find command line tool" -1
     JAVA_OPTIONS="-Xmx128m"
-    jenkins_cli="$JAVA -jar $JAVA_OPTIONS $aci_cli_tool -s ${ACI_URL}:${ACI_URL} -i $KEYRSA"
+    jenkins_cli="$JAVA -jar $JAVA_OPTIONS $aci_cli_tool -s ${ACI_URL}:${ACI_PORT} -i $KEYRSA"
 else
     STRICT=${STRICT:-yes}
     KEYFILE=${KEYFILE:-$dir/jenkins.key}
